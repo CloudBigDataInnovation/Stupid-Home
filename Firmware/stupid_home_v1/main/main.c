@@ -489,7 +489,7 @@ void read_i2c_sensor_task(void)
             mqtt_temp.data_len = strlen(aht10_temp);
             memset(mqtt_temp.data, '\0', sizeof(mqtt_temp.data_len));
             memcpy(mqtt_temp.data, aht10_temp, mqtt_temp.data_len); 
-            if(xEventGroupGetBits(event_group) & MQTT_CONNECTED_BIT)
+            if(xEventGroupGetBits(event_group) && MQTT_CONNECTED_BIT)
             {
                 xQueueSend(queue_sub_handle, &mqtt_hum, 0);
                 xQueueSend(queue_sub_handle, &mqtt_temp, 0);
@@ -535,49 +535,60 @@ void mqtt_node_red_task(void)
     esp_mqtt_client_start(client);
     while(1)
     {
-        xEventGroupWaitBits(event_group, MQTT_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY); 
-        xQueueReceive(queue_sub_handle, &mqtt_buff, portMAX_DELAY);
-        if(mqtt_buff.topic_type == SUBSCRIBE)
+        if((xEventGroupGetBits(event_group) && WIFI_CONNECTED_BIT) && (xEventGroupGetBits(event_group) && MQTT_CONNECTED_BIT))
         {
-            ESP_LOGI(mqtt_node_red_tag, "TOPIC = %.*s\r", mqtt_buff.topic_len, mqtt_buff.topic);
-            ESP_LOGI(mqtt_node_red_tag, "DATA = %.*s\r", mqtt_buff.data_len, mqtt_buff.data);
-            if(strstr(mqtt_buff.topic, RELAY_1_TOPIC) != NULL)
+            xQueueReceive(queue_sub_handle, &mqtt_buff, portMAX_DELAY);
+            if(mqtt_buff.topic_type == SUBSCRIBE)
             {
-                relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
-                gpio_set_level(RELAY_1_NUM, relay_state);
+                ESP_LOGI(mqtt_node_red_tag, "TOPIC = %.*s\r", mqtt_buff.topic_len, mqtt_buff.topic);
+                ESP_LOGI(mqtt_node_red_tag, "DATA = %.*s\r", mqtt_buff.data_len, mqtt_buff.data);
+                if(strstr(mqtt_buff.topic, RELAY_1_TOPIC) != NULL)
+                {
+                    relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
+                    gpio_set_level(RELAY_1_NUM, relay_state);
+                }
+                else if(strstr(mqtt_buff.topic, RELAY_2_TOPIC) != NULL)
+                {
+                    relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
+                    gpio_set_level(RELAY_2_NUM, relay_state);
+                }
+                else if(strstr(mqtt_buff.topic, RELAY_3_TOPIC) != NULL)
+                {
+                    relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
+                    gpio_set_level(RELAY_3_NUM, relay_state);
+                }
+                else if(strstr(mqtt_buff.topic, RELAY_4_TOPIC) != NULL)
+                {
+                    relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
+                    gpio_set_level(RELAY_4_NUM, relay_state);
+                }
             }
-            else if(strstr(mqtt_buff.topic, RELAY_2_TOPIC) != NULL)
+            else if(mqtt_buff.topic_type == PUBLISH)
             {
-                relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
-                gpio_set_level(RELAY_2_NUM, relay_state);
-            }
-            else if(strstr(mqtt_buff.topic, RELAY_3_TOPIC) != NULL)
-            {
-                relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
-                gpio_set_level(RELAY_3_NUM, relay_state);
-            }
-            else if(strstr(mqtt_buff.topic, RELAY_4_TOPIC) != NULL)
-            {
-                relay_state = (mqtt_buff.data[0] == '1') ? 0 : 1;
-                gpio_set_level(RELAY_4_NUM, relay_state);
+                ESP_LOGI(mqtt_node_red_tag, "TOPIC = %.*s\r", mqtt_buff.topic_len, mqtt_buff.topic);
+                ESP_LOGI(mqtt_node_red_tag, "DATA = %.*s\r", mqtt_buff.data_len, mqtt_buff.data);
+                if(strstr(mqtt_buff.topic, HUMIDITY_TOPIC) != NULL)
+                {
+                    esp_mqtt_client_publish(client, HUMIDITY_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
+                }
+                else if(strstr(mqtt_buff.topic, TEMPERATURE_TOPIC) != NULL)
+                {
+                    esp_mqtt_client_publish(client, TEMPERATURE_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
+                }
+                else if(strstr(mqtt_buff.topic, POWER_TOPIC) != NULL)
+                {
+                    esp_mqtt_client_publish(client, POWER_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
+                }
             }
         }
-        else if(mqtt_buff.topic_type == PUBLISH)
+        else if(!(xEventGroupGetBits(event_group) && MQTT_CONNECTED_BIT))
         {
-            ESP_LOGI(mqtt_node_red_tag, "TOPIC = %.*s\r", mqtt_buff.topic_len, mqtt_buff.topic);
-            ESP_LOGI(mqtt_node_red_tag, "DATA = %.*s\r", mqtt_buff.data_len, mqtt_buff.data);
-            if(strstr(mqtt_buff.topic, HUMIDITY_TOPIC) != NULL)
-            {
-                esp_mqtt_client_publish(client, HUMIDITY_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
-            }
-            else if(strstr(mqtt_buff.topic, TEMPERATURE_TOPIC) != NULL)
-            {
-                esp_mqtt_client_publish(client, TEMPERATURE_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
-            }
-            else if(strstr(mqtt_buff.topic, POWER_TOPIC) != NULL)
-            {
-                esp_mqtt_client_publish(client, POWER_TOPIC, mqtt_buff.data, mqtt_buff.data_len, 0, true);
-            }
+            esp_mqtt_client_start(client);
+            xEventGroupWaitBits(event_group, MQTT_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        }
+        else if(!(xEventGroupGetBits(event_group) && WIFI_CONNECTED_BIT))
+        {
+            xEventGroupWaitBits(event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
         }
     }
 }
@@ -627,7 +638,7 @@ void adc_power_task(void)
             mqtt_power.data_len = strlen(power);
             memset(mqtt_power.data, '\0', sizeof(mqtt_power.data_len));
             memcpy(mqtt_power.data, power, mqtt_power.data_len);
-            if(xEventGroupGetBits(event_group) & MQTT_CONNECTED_BIT)
+            if(xEventGroupGetBits(event_group) && MQTT_CONNECTED_BIT)
             {
                 xQueueSend(queue_sub_handle, &mqtt_power, 0);
             }
