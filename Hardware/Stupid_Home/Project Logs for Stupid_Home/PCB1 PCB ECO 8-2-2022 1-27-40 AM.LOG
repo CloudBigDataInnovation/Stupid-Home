@@ -1,0 +1,21 @@
+Removed Pin From Net: NetName=WIFI_ON Pin=L3-3
+Removed Pin From Net: NetName=+5 Pin=R12-2
+Removed Member From Class: ClassName=MACH Member=L3
+Change Component Designator: OldDesignator=LED2 NewDesignator=LED3
+Change Component Designator: OldDesignator=LED3 NewDesignator=LED4
+Change Component Designator: OldDesignator=LED4 NewDesignator=LED5
+Change Component Designator: OldDesignator=LED5 NewDesignator=LED6
+Added Component: Designator=LED2(LED-0805-Red)
+Add component (AddParameter): Name = "Value"; Value = "LED 3 ly Single Colour"; VariantName = "[No Variations]"
+Added Pin To Net: NetName=WIFI_ON Pin=LED2-2
+Added Pin To Net: NetName=+3V3 Pin=R12-2
+Change Net Name : Old Net Name=NetLED2_1 New Net Name=NetLED3_1
+Change Net Name : Old Net Name=NetLED3_1 New Net Name=NetLED4_1
+Change Net Name : Old Net Name=NetLED4_1 New Net Name=NetLED5_1
+Change Net Name : Old Net Name=NetLED5_1 New Net Name=NetLED6_1
+Added Pin To Net: NetName=NetLED2_1 Pin=LED2-1
+Added Pin To Net: NetName=NetLED2_1 Pin=R12-1
+Added Net: Name=NetLED2_1
+Added Member To Class: ClassName=MACH Member=Component JP1 JP4
+Added Member To Class: ClassName=MACH Member=Component LED6 LED
+Added Room: Name=MACH

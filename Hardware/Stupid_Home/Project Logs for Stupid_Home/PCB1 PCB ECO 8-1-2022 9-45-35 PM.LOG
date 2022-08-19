@@ -1,0 +1,7 @@
+Removed Pin From Net: NetName=NetC13_2 Pin=Y1-1
+Removed Pin From Net: NetName=NetC14_2 Pin=Y1-2
+Added Pin To Net: NetName=NetC14_2 Pin=Y1-1
+Added Pin To Net: NetName=NetC13_2 Pin=Y1-2
+Added Member To Class: ClassName=MACH Member=Component C12 100nF
+Added Member To Class: ClassName=MACH Member=Component C13 10pF
+Added Room: Name=MACH
