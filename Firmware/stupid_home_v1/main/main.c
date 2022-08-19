@@ -36,7 +36,7 @@
 #define SMART_CONFIG_DONE_BIT       BIT1
 #define SMART_CONFIG_START_BIT      BIT2
 #define MQTT_CONNECTED_BIT          BIT3
-#define FIRMWARE_VERSION            0.3
+#define FIRMWARE_VERSION            0.5
 #define RELAY_1_NUM                 GPIO_NUM_17
 #define RELAY_2_NUM                 GPIO_NUM_16
 #define RELAY_3_NUM                 GPIO_NUM_4
