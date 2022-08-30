@@ -4,7 +4,10 @@
             "name": "ESP32",
             "includePath": [
                 "${IDF_PATH}/components/**",
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/components/lcd16x2/include",
+                "${workspaceFolder}/components/aht10/include",
+                "${workspaceFolder}/components/ds1307/include"
             ],
             "browse": {
                 "path": [
