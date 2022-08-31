@@ -135,14 +135,15 @@ void number_to_string(uint8_t num, char *buf)
 }
 
 char *time_to_string(RTC_time_t *rtc_time)
-{
+{ //00:00:00
 	static char buf[9];
-	buf[2]= ':';
-	buf[5]= ':';
+	buf[2] = ':';
+	// buf[5] = ':';
+	buf[5] = '\0';
 	number_to_string(rtc_time->hours, buf);
 	number_to_string(rtc_time->minutes, &buf[3]);
-	number_to_string(rtc_time->seconds, &buf[6]);
-	buf[8] = '\0';
+	// number_to_string(rtc_time->seconds, &buf[6]);
+	// buf[8] = '\0';
 	return buf;
 }
 

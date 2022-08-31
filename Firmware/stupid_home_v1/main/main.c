@@ -37,7 +37,8 @@
 #define SMART_CONFIG_DONE_BIT       BIT1
 #define SMART_CONFIG_START_BIT      BIT2
 #define MQTT_CONNECTED_BIT          BIT3
-#define FIRMWARE_VERSION            0.5
+#define FIRMWARE_VERSION            0.8
+#define FIRMWARE_VER_STRING         "FIRMWARE VER 0.8"
 #define RELAY_1_NUM                 GPIO_NUM_17
 #define RELAY_2_NUM                 GPIO_NUM_16
 #define RELAY_3_NUM                 GPIO_NUM_4
@@ -93,7 +94,8 @@ typedef enum
     OTA,
     SMART_CONFIG,
     WIFI,
-    VERSION
+    VERSION, 
+    TIME
 } lcd_type_t;
 
 typedef struct 
@@ -239,7 +241,7 @@ esp_err_t version_event_handler(esp_http_client_event_t *evt)
 
 void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
-    lcd_struct_t lcd_wifi;
+    lcd_struct_t lcd_wifi, lcd_smart_config;
     if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         if(wifi_retry < 5)
@@ -248,8 +250,8 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
             ESP_LOGI(wifi_tag, "Retry...");
             wifi_retry++;
             lcd_wifi.data_type = WIFI;
-            strcpy(lcd_wifi.data, "WIFI: OFF");
-            lcd_wifi.len = strlen("WIFI: OFF");
+            strcpy(lcd_wifi.data, "WIFI:OFF");
+            lcd_wifi.len = strlen("WIFI:OFF");
             xQueueSend(queue_lcd_handle, &lcd_wifi, 0);
         }
         else
@@ -270,8 +272,8 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
         gpio_set_level(WIFI_LED_NUM, 0);
         xEventGroupSetBits(event_group, WIFI_CONNECTED_BIT);
         lcd_wifi.data_type = WIFI;
-        strcpy(lcd_wifi.data, "WIFI: ON");
-        lcd_wifi.len = strlen("WIFI: ON");
+        strcpy(lcd_wifi.data, "WIFI:ON");
+        lcd_wifi.len = strlen("WIFI:ON");
         xQueueSend(queue_lcd_handle, &lcd_wifi, 0);
     }
     else if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -282,6 +284,10 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
     else if(event_base == SC_EVENT && event_id == SC_EVENT_SCAN_DONE)
     {
         ESP_LOGI(smart_config_wifi_tag, "Scan done");
+        lcd_smart_config.data_type = SMART_CONFIG;
+        strcpy(lcd_smart_config.data, "SMART CONFIG");
+        lcd_smart_config.len = strlen(lcd_smart_config.data);
+        xQueueSend(queue_lcd_handle, &lcd_smart_config, 0);
     }
     else if(event_base == SC_EVENT && event_id == SC_EVENT_FOUND_CHANNEL)
     {
@@ -325,6 +331,10 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
     else if(event_base == SC_EVENT && event_id == SC_EVENT_SEND_ACK_DONE)
     {
         xEventGroupSetBits(event_group, SMART_CONFIG_DONE_BIT);
+        lcd_smart_config.data_type = SMART_CONFIG;
+        memset(lcd_smart_config.data, '\0', sizeof(lcd_smart_config.data));
+        lcd_smart_config.len = 0;
+        xQueueSend(queue_lcd_handle, &lcd_smart_config, 0);
     }
 }
 
@@ -366,12 +376,13 @@ void cut_string(char *source, char *des, char fir, char las)
 
 void ota_task(void)
 {
+    ESP_LOGI(ota_tag, "Starting OTA task");
+    lcd_struct_t lcd_ota, lcd_version;
     TickType_t pre_tick = 0;
     char des_version_json_data[256] = {0};
     xEventGroupWaitBits(event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
-    ESP_LOGI(ota_tag, "Starting OTA task");
     esp_http_client_config_t version_config = {
-        .url = "https://raw.githubusercontent.com/Vanperdung/ota_download/main/version.txt",
+            .url = "https://raw.githubusercontent.com/Vanperdung/ota_download/main/version.txt",
         .cert_pem = (char *)github_cert_pem_start,
         .event_handler = version_event_handler
     };
@@ -396,7 +407,6 @@ void ota_task(void)
             {
                 cJSON *link = cJSON_GetObjectItemCaseSensitive(file_json, "link");
                 cJSON *version = cJSON_GetObjectItemCaseSensitive(file_json, "version");
-
                 if(!cJSON_IsNumber(version))
                     ESP_LOGE(ota_tag, "Unable to read version");
                 else
@@ -404,6 +414,10 @@ void ota_task(void)
                     double new_version = version->valuedouble;
                     if(new_version > FIRMWARE_VERSION)
                     {
+                        lcd_ota.data_type = OTA;
+                        strcpy(lcd_ota.data, "NEW FIRMWARE");
+                        lcd_ota.len = strlen("NEW FIRMWARE");
+                        xQueueSend(queue_lcd_handle, &lcd_ota, 0);
                         ESP_LOGI(ota_tag, "New FIRMWARE version %.1f in GitHub", new_version);
                         ESP_LOGI(ota_tag, "Starting OTA FIRMWARE task");
                         esp_http_client_config_t ota_client_config = {
@@ -426,6 +440,10 @@ void ota_task(void)
                     else
                     {
                         ESP_LOGI(ota_tag, "Not new FIRMWARE");
+                        lcd_version.data_type = VERSION;
+                        strcpy(lcd_version.data, FIRMWARE_VER_STRING);
+                        lcd_version.len = strlen(lcd_version.data);
+                        xQueueSend(queue_lcd_handle, &lcd_version, 0);
                     }
                 }
             }
@@ -488,14 +506,14 @@ void read_i2c_sensor_task(void)
     char *cur_time = NULL;
     char *cur_date = NULL; 
     mqtt_struct_t mqtt_hum, mqtt_temp;
-    lcd_struct_t lcd_hum, lcd_temp;
-
+    lcd_struct_t lcd_hum, lcd_temp, lcd_time;
+    char buf[20] = {0};
     // current_time.seconds = 30;
-    // current_time.minutes = 17;
-    // current_time.hours = 2;
+    // current_time.minutes = 15;
+    // current_time.hours = 22;
     // current_time.time_format = TIME_FORMAT_24HRS;
     // current_date.day = WEDNESDAY;
-    // current_date.date = 17;
+    // current_date.date = 31;
     // current_date.month = 8;
     // current_date.year = 22;
     // ds1307_set_current_date(i2c_port, &current_date);
@@ -545,10 +563,18 @@ void read_i2c_sensor_task(void)
                 xQueueSend(queue_sub_handle, &mqtt_hum, 0);
                 xQueueSend(queue_sub_handle, &mqtt_temp, 0);
             }
+            
+            strcpy(buf, cur_date);
+            strcat(buf, " ");
+            strcat(buf, cur_time);
+
             lcd_struct_config(&lcd_hum, HUMIDITY, strlen(aht10_hum), aht10_hum);
             lcd_struct_config(&lcd_temp, TEMPERATURE, strlen(aht10_temp), aht10_temp);
+            lcd_struct_config(&lcd_time, TIME, strlen(buf), buf);
             xQueueSend(queue_lcd_handle, &lcd_hum, 0);
             xQueueSend(queue_lcd_handle, &lcd_temp, 0);
+            xQueueSend(queue_lcd_handle, &lcd_time, 0);
+
         }
         else
         {
@@ -576,8 +602,8 @@ void smart_config_task(void)
 
 void mqtt_node_red_task(void)
 {
-    xEventGroupWaitBits(event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
     ESP_LOGI(mqtt_node_red_tag, "Starting MQTT node red task");
+    xEventGroupWaitBits(event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
     mqtt_struct_t mqtt_buff;
     int relay_state;
     queue_sub_handle = xQueueCreate(15, sizeof(mqtt_struct_t));
@@ -714,11 +740,13 @@ void lcd_task(void)
     char temp_buff[20] = {0};
     char hum_buff[20] = {0};
     char smart_config_buff[20] = {0};
-    char version_buff[10] = {0};
-    TickType_t pre_tick1 = 0;
+    char version_buff[20] = {0};
+    char time_buff[20] = {0};
+    TickType_t pre_tick = 0;
     BaseType_t queue_re;
     queue_lcd_handle = xQueueCreate(20, sizeof(lcd_struct_t));
-    lcd_page_t lcd_page;
+    lcd_page_t lcd_page = PAGE_1;
+    strcpy(version_buff, FIRMWARE_VER_STRING);
     while(1)
     {
         queue_re = xQueueReceive(queue_lcd_handle, &lcd_buff, 100 / portTICK_PERIOD_MS);
@@ -752,6 +780,10 @@ void lcd_task(void)
                     memset(version_buff, '\0', sizeof(version_buff));
                     memcpy(version_buff, lcd_buff.data, lcd_buff.len);
                     break;
+                case TIME:
+                    memset(time_buff, '\0', sizeof(time_buff));
+                    memcpy(time_buff, lcd_buff.data, lcd_buff.len);
+                    break;
                 default:
                     break;
             }
@@ -760,25 +792,97 @@ void lcd_task(void)
         {
 
         }
-        if((xTaskGetTickCount() - pre_tick1) * portTICK_PERIOD_MS > 2000)
+        if((xTaskGetTickCount() - pre_tick) * portTICK_PERIOD_MS > 2000)
         {
-            switch()
+            switch(lcd_page)
             {
-            case /* constant-expression */:
-                /* code */
-                break;
-            
-            default:
-                break;
+                case PAGE_1:
+                    pre_tick = xTaskGetTickCount();
+                    lcd_clear(i2c_port);
+                    if(strlen(ota_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, ota_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, "STARTING OTA");  
+                    }
+                    else if(strlen(smart_config_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, smart_config_buff);                  
+                    }
+                    else
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, temp_buff);
+                        lcd_put_cur(i2c_port, 1, 7);
+                        lcd_send_string(i2c_port, hum_buff);                        
+                    }
+                    break;
+                case PAGE_2:
+                    pre_tick = xTaskGetTickCount();
+                    lcd_clear(i2c_port);
+                    if(strlen(ota_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, ota_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, "STARTING OTA");  
+                    }
+                    else if(strlen(smart_config_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, smart_config_buff);                  
+                    }
+                    else
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, wifi_buff);                           
+                    }
+                    break;
+                case PAGE_3:
+                    pre_tick = xTaskGetTickCount();
+                    lcd_clear(i2c_port);
+                    if(strlen(ota_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, ota_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, "STARTING OTA");  
+                    }
+                    else if(strlen(smart_config_buff) != 0)
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, smart_config_buff);                  
+                    }
+                    else
+                    {
+                        lcd_put_cur(i2c_port, 0, 0);
+                        lcd_send_string(i2c_port, version_buff);
+                        lcd_put_cur(i2c_port, 1, 0);
+                        lcd_send_string(i2c_port, time_buff);                           
+                    }
+                    break;
+                case PAGE_4:
+                    break;
+                default:
+                    break;
             }
-            pre_tick1 = xTaskGetTickCount();
-            lcd_clear(i2c_port);
-            lcd_put_cur(i2c_port, 1, 0);
-            lcd_send_string(i2c_port, temp_buff);
-            lcd_put_cur(i2c_port, 1, 7);
-            lcd_send_string(i2c_port, hum_buff);
-            // ESP_LOGI(lcd_tag, "Receive queue %s", temp_buff);
-            // ESP_LOGI(lcd_tag, "Receive queue %s", hum_buff);
+            lcd_page++;
+            if(lcd_page > PAGE_4)
+            {
+                lcd_page = PAGE_1;
+            }
         }
     }
 }
