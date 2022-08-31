@@ -103,6 +103,15 @@ typedef struct
     char data[48];
 } lcd_struct_t;
 
+typedef enum 
+{
+    PAGE_1 = 0,
+    PAGE_2,
+    PAGE_3,
+    PAGE_4
+} lcd_page_t;
+
+
 void lcd_struct_config(lcd_struct_t *lcd, lcd_type_t data_type, int len, char *lcd_data)
 {
     lcd->data_type = data_type;
@@ -230,6 +239,7 @@ esp_err_t version_event_handler(esp_http_client_event_t *evt)
 
 void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
+    lcd_struct_t lcd_wifi;
     if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         if(wifi_retry < 5)
@@ -237,6 +247,10 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
             esp_wifi_connect();
             ESP_LOGI(wifi_tag, "Retry...");
             wifi_retry++;
+            lcd_wifi.data_type = WIFI;
+            strcpy(lcd_wifi.data, "WIFI: OFF");
+            lcd_wifi.len = strlen("WIFI: OFF");
+            xQueueSend(queue_lcd_handle, &lcd_wifi, 0);
         }
         else
         {
@@ -255,6 +269,10 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
     {
         gpio_set_level(WIFI_LED_NUM, 0);
         xEventGroupSetBits(event_group, WIFI_CONNECTED_BIT);
+        lcd_wifi.data_type = WIFI;
+        strcpy(lcd_wifi.data, "WIFI: ON");
+        lcd_wifi.len = strlen("WIFI: ON");
+        xQueueSend(queue_lcd_handle, &lcd_wifi, 0);
     }
     else if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
@@ -505,9 +523,8 @@ void read_i2c_sensor_task(void)
 	            cur_time = time_to_string(&current_time);
             }
             cur_date = date_to_string(&current_date);
-            // ESP_LOGI(i2c_sensor_tag, "Humidity = %s, temperature = %s", aht10_hum, aht10_temp);
-            // ESP_LOGI(i2c_sensor_tag, "%s %s", cur_time, cur_date);
-
+            ESP_LOGI(i2c_sensor_tag, "Humidity = %s, temperature = %s", aht10_hum, aht10_temp);
+            ESP_LOGI(i2c_sensor_tag, "%s %s", cur_time, cur_date);
             mqtt_hum.topic_type = PUBLISH;
             mqtt_hum.topic_len = strlen(HUMIDITY_TOPIC);
             memset(mqtt_hum.topic, '\0', sizeof(mqtt_hum.topic));
@@ -522,12 +539,12 @@ void read_i2c_sensor_task(void)
             mqtt_temp.data_len = strlen(aht10_temp);
             memset(mqtt_temp.data, '\0', sizeof(mqtt_temp.data_len));
             memcpy(mqtt_temp.data, aht10_temp, mqtt_temp.data_len); 
+            // ESP_LOGI("test", "%d", xEventGroupGetBits(event_group));
             if(xEventGroupGetBits(event_group) & MQTT_CONNECTED_BIT)
             {
                 xQueueSend(queue_sub_handle, &mqtt_hum, 0);
                 xQueueSend(queue_sub_handle, &mqtt_temp, 0);
             }
-
             lcd_struct_config(&lcd_hum, HUMIDITY, strlen(aht10_hum), aht10_hum);
             lcd_struct_config(&lcd_temp, TEMPERATURE, strlen(aht10_temp), aht10_temp);
             xQueueSend(queue_lcd_handle, &lcd_hum, 0);
@@ -687,35 +704,82 @@ void adc_power_task(void)
 
 void lcd_task(void)
 {
+    ESP_LOGI(lcd_tag, "Starting LCD task");
     i2c_port_t i2c_port = 0;
     lcd_init(i2c_port);
     lcd_clear(i2c_port);
     lcd_struct_t lcd_buff;
     char wifi_buff[20] = {0};
     char ota_buff[20] = {0};
-    char temp_buff[10] = {0};
-    char hum_buff[10] = {0};
+    char temp_buff[20] = {0};
+    char hum_buff[20] = {0};
     char smart_config_buff[20] = {0};
     char version_buff[10] = {0};
-    queue_lcd_handle = xQueueCreate(20, sizeof(lcd_struct_t));
+    TickType_t pre_tick1 = 0;
     BaseType_t queue_re;
+    queue_lcd_handle = xQueueCreate(20, sizeof(lcd_struct_t));
+    lcd_page_t lcd_page;
     while(1)
     {
-        queue_re = xQueueReceive(queue_lcd_handle, &lcd_buff, 500 / portTICK_PERIOD_MS);
+        queue_re = xQueueReceive(queue_lcd_handle, &lcd_buff, 100 / portTICK_PERIOD_MS);
         if(queue_re == pdTRUE)
         {
             switch(lcd_buff.data_type)
             {
-                case HUMIDITY:
+                case TEMPERATURE:
                     memset(temp_buff, '\0', sizeof(temp_buff));
-                    memcpy(temp_buff, )
+                    memcpy(temp_buff, lcd_buff.data, lcd_buff.len);
+                    strcat(temp_buff, "C");
                     break;
-                
+                case HUMIDITY:
+                    memset(hum_buff, '\0', sizeof(hum_buff));
+                    memcpy(hum_buff, lcd_buff.data, lcd_buff.len);
+                    strcat(hum_buff, "%");
+                    break;
+                case OTA:
+                    memset(ota_buff, '\0', sizeof(ota_buff));
+                    memcpy(ota_buff, lcd_buff.data, lcd_buff.len);
+                    break;  
+                case SMART_CONFIG:
+                    memset(smart_config_buff, '\0', sizeof(smart_config_buff));
+                    memcpy(smart_config_buff, lcd_buff.data, lcd_buff.len);
+                    break;
+                case WIFI:
+                    memset(wifi_buff, '\0', sizeof(wifi_buff));
+                    memcpy(wifi_buff, lcd_buff.data, lcd_buff.len);
+                    break;
+                case VERSION:
+                    memset(version_buff, '\0', sizeof(version_buff));
+                    memcpy(version_buff, lcd_buff.data, lcd_buff.len);
+                    break;
                 default:
                     break;
             }
         }
+        else
+        {
 
+        }
+        if((xTaskGetTickCount() - pre_tick1) * portTICK_PERIOD_MS > 2000)
+        {
+            switch()
+            {
+            case /* constant-expression */:
+                /* code */
+                break;
+            
+            default:
+                break;
+            }
+            pre_tick1 = xTaskGetTickCount();
+            lcd_clear(i2c_port);
+            lcd_put_cur(i2c_port, 1, 0);
+            lcd_send_string(i2c_port, temp_buff);
+            lcd_put_cur(i2c_port, 1, 7);
+            lcd_send_string(i2c_port, hum_buff);
+            // ESP_LOGI(lcd_tag, "Receive queue %s", temp_buff);
+            // ESP_LOGI(lcd_tag, "Receive queue %s", hum_buff);
+        }
     }
 }
 
@@ -750,6 +814,8 @@ void app_main(void)
     get_sha256_of_partitions();
     gpio_sta();
     i2c_master_initialize(i2c_port);
+    // lcd_init(i2c_port);
+    // lcd_clear(i2c_port);
     // esp_get_free_heap_size();
     // esp_get_minimum_free_heap_size();
     ESP_ERROR_CHECK(esp_netif_init());
@@ -763,7 +829,7 @@ void app_main(void)
     esp_wifi_set_mode(WIFI_MODE_STA);
     wifi_config_t wifi_sta_config = {
         .sta = {
-            .ssid = "Nhung Toan",
+            .ssid = "Wifi free",
             .password = "99999999"
         }
     };
@@ -771,9 +837,9 @@ void app_main(void)
     esp_wifi_start();
     event_group = xEventGroupCreate();
     xTaskCreate(ota_task, "ota_task", 8192, NULL, 7, &ota_task_handle);
-    xTaskCreate(read_i2c_sensor_task, "read_i2c_sensor_task", 2048, NULL, 5, &read_i2c_sensor_task_handle);
+    xTaskCreate(read_i2c_sensor_task, "read_i2c_sensor_task", 4096, NULL, 5, &read_i2c_sensor_task_handle);
     xTaskCreate(smart_config_task, "smart_config_task", 4096, NULL, 8, &smart_config_task_handle);
     xTaskCreate(mqtt_node_red_task, "mqtt_node_red_task", 8192, NULL, 4, &mqtt_adafruit_task_handle);
-    xTaskCreate(adc_power_task, "adc_power_task", 2048, NULL, 6, &adc_power_task_handle);
-    xTaskCreate(lcd_task, "lcd_task", 4096, NULL, 9, &lcd_task_handle);
+    xTaskCreate(adc_power_task, "adc_power_task", 4096, NULL, 6, &adc_power_task_handle);
+    xTaskCreate(lcd_task, "lcd_task", 4096, NULL, 3, &lcd_task_handle);
 }

@@ -80,9 +80,7 @@ void read_data_aht10(i2c_port_t i2c_num, char *aht10_temp, char *aht10_hum)
     uint32_t aht10_humidity;
     float temperature, humidity;
     i2c_write_aht10(i2c_num);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
     i2c_read_aht10(i2c_num, aht10_rx_data, 6);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
     if(~aht10_rx_data[0] & 0x80)
     {
         aht10_temperature = (((uint32_t)aht10_rx_data[3] & 15) << 16) | ((uint32_t)aht10_rx_data[4] << 8) | ((uint32_t)aht10_rx_data[5]);

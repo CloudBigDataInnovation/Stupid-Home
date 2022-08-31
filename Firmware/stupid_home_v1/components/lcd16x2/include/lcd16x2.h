@@ -23,5 +23,6 @@ void lcd_send_string(i2c_port_t i2c_num, char *str);
 void lcd_clear(i2c_port_t i2c_num);
 void lcd_send_data(i2c_port_t i2c_num, char data);
 void lcd_send_cmd(i2c_port_t i2c_num, char cmd);
+void lcd_put_cur(i2c_port_t i2c_num, int row, int col);
 
 #endif
